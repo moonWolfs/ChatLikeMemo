@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload } from 'lucide-react';
-import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile } from './lib/db';
+import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag } from './lib/db';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import ReactMarkdown from 'react-markdown';
@@ -29,6 +29,7 @@ const preprocessMarkdown = (text: string) => {
 function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
+  const [allTags, setAllTags] = useState<Tag[]>([]);
   
   // Filters
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -52,11 +53,21 @@ function App() {
   useEffect(() => {
     loadMemos();
     loadActiveDates();
+    loadAllTags();
   }, [filterDate, filterTag, searchQuery]);
 
   useEffect(() => {
     scrollToBottom();
   }, [memos]);
+
+  const loadAllTags = async () => {
+    try {
+      const tags = await getAllTags();
+      setAllTags(tags);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Native Tauri File Drop
   useEffect(() => {
@@ -185,6 +196,7 @@ function App() {
       }
       await loadMemos();
       await loadActiveDates();
+      await loadAllTags();
       setErrorMessage(null);
     } catch (e: any) {
       console.error("Failed to add memo", e);
@@ -284,6 +296,7 @@ function App() {
 
       await loadMemos();
       await loadActiveDates();
+      await loadAllTags();
     } catch (e: any) {
       alert(`Import failed: ${e?.message || e}`);
     }
@@ -383,9 +396,43 @@ function App() {
           </div>
           {renderCalendar()}
 
+          <div className="widget-title" style={{marginTop: 24}}>
+            <Hash size={16} />
+            <span>Tags</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {allTags.map(t => (
+              <span 
+                key={t.id} 
+                style={{
+                   padding: '4px 10px', 
+                   borderRadius: '16px', 
+                   fontSize: '0.8rem', 
+                   cursor: 'pointer',
+                   backgroundColor: filterTag === t.name ? 'var(--accent-color)' : 'var(--bg-primary)',
+                   color: filterTag === t.name ? '#fff' : 'var(--text-secondary)',
+                   border: `1px solid ${filterTag === t.name ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                   transition: 'all 0.2s',
+                   userSelect: 'none'
+                }}
+                onClick={() => {
+                  if (filterTag === t.name) {
+                    setFilterTag(null);
+                  } else {
+                    clearFilters();
+                    setFilterTag(t.name);
+                  }
+                }}
+              >
+                #{t.name}
+              </span>
+            ))}
+            {allTags.length === 0 && <span style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>No tags yet</span>}
+          </div>
+
           <div 
             className="widget-title action-item" 
-            style={{marginTop: 24, cursor: 'pointer', color: 'var(--accent-color)'}} 
+            style={{marginTop: 32, cursor: 'pointer', color: 'var(--accent-color)'}} 
             onClick={exportMemosToMarkdown}
           >
             <Download size={16} />

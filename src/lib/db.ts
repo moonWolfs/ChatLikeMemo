@@ -169,3 +169,11 @@ export const getDatesWithMemos = async (): Promise<string[]> => {
     );
     return res.map((r: {date: string}) => r.date);
 };
+
+export const getAllTags = async (): Promise<Tag[]> => {
+    const db = await getDb();
+    // Only return tags that actually have associated memos
+    return db.select<Tag[]>(
+        "SELECT DISTINCT t.* FROM tags t JOIN memo_tags mt ON t.id = mt.tag_id ORDER BY t.name ASC"
+    );
+};
