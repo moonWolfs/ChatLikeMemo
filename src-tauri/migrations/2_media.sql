@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS memo_media (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memo_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    FOREIGN KEY (memo_id) REFERENCES memos(id) ON DELETE CASCADE
+);

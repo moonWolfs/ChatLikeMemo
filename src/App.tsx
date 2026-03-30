@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import { Send, Search, Calendar as CalendarIcon, Hash, X } from 'lucide-react';
-import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos } from './lib/db';
+import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage } from 'lucide-react';
+import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile } from './lib/db';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+export type PendingFile = {
+    file?: File;
+    path?: string;
+    name: string;
+    type: 'image' | 'video';
+};
 
 const extractTags = (text: string): string[] => {
   const matches = text.match(/#[\w\u3040-\u30FF\u4E00-\u9FFF]+/g);
@@ -21,12 +30,16 @@ function App() {
   // Input
   const [inputText, setInputText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingMedia, setPendingMedia] = useState<PendingFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadMemos();
@@ -36,6 +49,46 @@ function App() {
   useEffect(() => {
     scrollToBottom();
   }, [memos]);
+
+  // Native Tauri File Drop
+  useEffect(() => {
+    let unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
+
+    const setup = async () => {
+        const uE = await listen('tauri://drag-enter', () => setIsDragging(true));
+        if (isMounted) unlistenFunctions.push(uE); else uE();
+        
+        const uL = await listen('tauri://drag-leave', () => setIsDragging(false));
+        if (isMounted) unlistenFunctions.push(uL); else uL();
+        
+        const uD = await listen<{paths: string[]}>('tauri://drag-drop', (e) => {
+            setIsDragging(false);
+            if (e.payload.paths && e.payload.paths.length > 0) {
+                const newFiles = e.payload.paths
+                    .filter(p => p.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$/i))
+                    .map(p => ({
+                        path: p,
+                        name: p.split(/[/\\]/).pop() || 'file',
+                        type: p.match(/\.(mp4|webm|mov)$/i) ? 'video' : 'image' as any
+                    }));
+                setPendingMedia(prev => {
+                    // Duplication guard for safety
+                    const existingPaths = new Set(prev.map(f => f.path).filter(Boolean));
+                    const uniqueNewFiles = newFiles.filter(f => !existingPaths.has(f.path));
+                    return [...prev, ...uniqueNewFiles];
+                });
+            }
+        });
+        if (isMounted) unlistenFunctions.push(uD); else uD();
+    };
+    setup();
+
+    return () => {
+        isMounted = false;
+        unlistenFunctions.forEach(unlisten => unlisten());
+    };
+  }, []);
 
   const loadMemos = async () => {
     try {
@@ -75,31 +128,66 @@ function App() {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      const newFiles = Array.from(e.clipboardData.files).map(f => ({
+          file: f,
+          name: f.name,
+          type: f.type.startsWith('video/') ? 'video' : 'image' as any
+      }));
+      setPendingMedia([...pendingMedia, ...newFiles]);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files).map(f => ({
+          file: f,
+          name: f.name,
+          type: f.type.startsWith('video/') ? 'video' : 'image' as any
+      }));
+      setPendingMedia([...pendingMedia, ...newFiles]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removePendingMedia = (idx: number) => {
+    setPendingMedia(pendingMedia.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = async () => {
-    if (!inputText.trim() || isSubmitting) return;
+    if ((!inputText.trim() && pendingMedia.length === 0) || isSubmitting) return;
 
     setIsSubmitting(true);
-    console.log("Submitting memo: ", inputText);
     try {
       const tags = extractTags(inputText);
-      await addMemo(inputText.trim(), tags);
-      console.log("Memo added");
+      
+      const mediaRecords: {path: string, type: 'image'|'video'}[] = [];
+      for (const pending of pendingMedia) {
+          const path = await saveMediaFile(pending.file || pending.path!);
+          mediaRecords.push({ path, type: pending.type });
+      }
+
+      await addMemo(inputText.trim(), tags, mediaRecords);
+      
       setInputText('');
+      setPendingMedia([]);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
       await loadMemos();
       await loadActiveDates();
+      setErrorMessage(null);
     } catch (e: any) {
       console.error("Failed to add memo", e);
-      alert(`Error saving memo: ${e?.message || e}`);
+      setErrorMessage(`Error saving: ${e?.message || e}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return; // Prevent submission during Japanese IME conversion
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -143,7 +231,6 @@ function App() {
     }).format(date);
   };
 
-  // Calendar rendering logic
   const renderCalendar = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -229,7 +316,12 @@ function App() {
         </div>
       </div>
 
-      <div className="main-content">
+      <div className={`main-content ${isDragging ? 'dragging' : ''}`}>
+        {isDragging && (
+          <div className="drag-overlay">
+            <div className="drag-message">Drop media here to attach</div>
+          </div>
+        )}
         <div className="chat-header">
           <div className="active-filter">
             {filterDate && <span><CalendarIcon size={16}/> {filterDate}</span>}
@@ -246,6 +338,11 @@ function App() {
         </div>
 
         <div className="chat-messages">
+          {errorMessage && (
+            <div style={{ background: '#fee2e2', color: '#dc2626', padding: '12px', margin: '16px', borderRadius: '8px', border: '1px solid #f87171' }}>
+              <strong>Error:</strong> {errorMessage}
+            </div>
+          )}
           {memos.length === 0 ? (
             <div className="empty-state">
               No memos found. Let's write something!
@@ -253,9 +350,26 @@ function App() {
           ) : (
             memos.map((memo) => (
               <div key={memo.id} className="message-bubble">
-                <div className="message-content">
-                  {renderTextWithTags(memo.content)}
-                </div>
+                {memo.content && (
+                  <div className="message-content">
+                    {renderTextWithTags(memo.content)}
+                  </div>
+                )}
+                
+                {memo.media && memo.media.length > 0 && (
+                  <div className="media-grid">
+                    {memo.media.map(m => (
+                      <div key={m.id} className="media-item">
+                        {m.media_type === 'image' ? (
+                          <img src={convertFileSrc(m.file_path)} alt="Attached" className="attached-media" />
+                        ) : (
+                          <video src={convertFileSrc(m.file_path)} controls className="attached-media" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <span className="message-time">{formatTime(memo.created_at)}</span>
               </div>
             ))
@@ -264,20 +378,52 @@ function App() {
         </div>
 
         <div className="input-container">
+          {pendingMedia.length > 0 && (
+            <div className="pending-media-preview">
+              {pendingMedia.map((f, i) => (
+                <div key={i} className="pending-media-item">
+                  {f.path && f.type === 'image' ? (
+                    <img src={convertFileSrc(f.path)} style={{width: 24, height: 24, borderRadius: 4, objectFit: 'cover'}} />
+                  ) : <FileImage size={18} />}
+                  <span>{f.name}</span>
+                  <button onClick={() => removePendingMedia(i)}><X size={14}/></button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="input-box">
+            <input 
+              type="file" 
+              multiple 
+              accept="image/*,video/*" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+            <button 
+              className="attach-button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSubmitting}
+            >
+              <ImagePlus size={18} />
+            </button>
+            
             <textarea
               ref={textareaRef}
               value={inputText}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder="What's on your mind? Use #tags (Shift + Enter to send)"
               rows={1}
               disabled={isSubmitting}
             />
+            
             <button 
               className="send-button" 
               onClick={handleSubmit}
-              disabled={!inputText.trim() || isSubmitting}
+              disabled={(!inputText.trim() && pendingMedia.length === 0) || isSubmitting}
             >
               <Send size={18} />
             </button>

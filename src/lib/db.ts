@@ -1,4 +1,6 @@
 import Database from '@tauri-apps/plugin-sql';
+import { appDataDir, join } from '@tauri-apps/api/path';
+import { mkdir, exists } from '@tauri-apps/plugin-fs';
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -18,10 +20,18 @@ export const getDb = async () => {
     return dbPromise;
 };
 
+export interface Media {
+    id: number;
+    memo_id: number;
+    file_path: string;
+    media_type: 'image' | 'video';
+}
+
 export interface Memo {
     id: number;
     content: string;
     created_at: string;
+    media?: Media[];
 }
 
 export interface Tag {
@@ -29,7 +39,57 @@ export interface Tag {
     name: string;
 }
 
-export const addMemo = async (content: string, tags: string[]): Promise<number> => {
+const hydrateMemosWithMedia = async (memos: Memo[]) => {
+    if (memos.length === 0) return memos;
+    const db = await getDb();
+    const memoIds = memos.map((m: Memo) => m.id);
+    const mediaRes = await db.select<Media[]>(`SELECT * FROM memo_media WHERE memo_id IN (${memoIds.join(',')})`);
+    
+    return memos.map((memo: Memo) => ({
+        ...memo,
+        media: mediaRes.filter((m: Media) => m.memo_id === memo.id)
+    }));
+};
+
+export const saveMediaFile = async (source: File | string): Promise<string> => {
+    try {
+        const appData = await appDataDir();
+        const mediaDir = await join(appData, 'media');
+        
+        const dirExists = await exists(mediaDir);
+        if (!dirExists) {
+            await mkdir(mediaDir, { recursive: true });
+        }
+        
+        let ext = 'tmp';
+        let fileName = '';
+        const filePath = await join(mediaDir, `${Date.now()}_${Math.random().toString(36).substring(7)}`);
+
+        if (typeof source === 'string') {
+            // Absolute path
+            const parts = source.split('.');
+            if (parts.length > 1) ext = parts.pop() || 'tmp';
+            fileName = `${filePath}.${ext}`;
+            const { copyFile } = await import('@tauri-apps/plugin-fs');
+            await copyFile(source, fileName);
+            return fileName;
+        } else {
+            // Web File object
+            ext = source.name.split('.').pop() || 'tmp';
+            fileName = `${filePath}.${ext}`;
+            const arrayBuffer = await source.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            const { writeFile } = await import('@tauri-apps/plugin-fs');
+            await writeFile(fileName, uint8Array);
+            return fileName;
+        }
+    } catch (e) {
+        console.error("Failed to save media file", e);
+        throw e;
+    }
+};
+
+export const addMemo = async (content: string, tags: string[], mediaFiles: {path: string, type: 'image'|'video'}[] = []): Promise<number> => {
     const db = await getDb();
     
     // Insert memo
@@ -41,53 +101,57 @@ export const addMemo = async (content: string, tags: string[]): Promise<number> 
 
     if (tags.length > 0) {
         for (const tagName of tags) {
-            // Insert tag if not exists
-            await db.execute(
-                'INSERT OR IGNORE INTO tags (name) VALUES ($1)',
-                [tagName]
-            );
-            
-            // Get tag id
+            await db.execute('INSERT OR IGNORE INTO tags (name) VALUES ($1)', [tagName]);
             const tagRes = await db.select<{id: number}[]>('SELECT id FROM tags WHERE name = $1', [tagName]);
             if (tagRes.length > 0) {
                 const tagId = tagRes[0].id;
-                // Link memo and tag
-                await db.execute(
-                    'INSERT INTO memo_tags (memo_id, tag_id) VALUES ($1, $2)',
-                    [memoId, tagId]
-                );
+                await db.execute('INSERT INTO memo_tags (memo_id, tag_id) VALUES ($1, $2)', [memoId, tagId]);
             }
         }
     }
+
+    if (mediaFiles.length > 0) {
+        for (const m of mediaFiles) {
+            await db.execute('INSERT INTO memo_media (memo_id, file_path, media_type) VALUES ($1, $2, $3)', [memoId, m.path, m.type]);
+        }
+    }
+
     return memoId;
 };
 
 export const getMemos = async (): Promise<Memo[]> => {
     const db = await getDb();
-    return db.select<Memo[]>('SELECT * FROM memos ORDER BY created_at ASC');
+    const memos = await db.select<Memo[]>('SELECT * FROM memos ORDER BY created_at ASC');
+    return hydrateMemosWithMedia(memos);
 };
 
 export const getMemosByDate = async (dateStr: string): Promise<Memo[]> => {
-    // dateStr in YYYY-MM-DD format
     const db = await getDb();
-    return db.select<Memo[]>(
+    const memos = await db.select<Memo[]>(
         "SELECT * FROM memos WHERE date(created_at) = date($1) ORDER BY created_at ASC",
         [dateStr]
     );
+    return hydrateMemosWithMedia(memos);
 };
 
 export const getMemosByQuery = async (query: string): Promise<Memo[]> => {
     const db = await getDb();
     const searchQuery = `%${query}%`;
-    return db.select<Memo[]>(
+    const memos = await db.select<Memo[]>(
         "SELECT * FROM memos WHERE content LIKE $1 ORDER BY created_at ASC",
         [searchQuery]
     );
+    return hydrateMemosWithMedia(memos);
 };
 
 export const getMemosByTag = async (tag: string): Promise<Memo[]> => {
     const db = await getDb();
-    // Assuming tag string does not have the # prefix when querying
+    const memos = await selectMemosByTag(db, tag);
+    return hydrateMemosWithMedia(memos);
+};
+
+// Helper for Tag querying to resolve nested query safely
+const selectMemosByTag = async (db: Database, tag: string) => {
     return db.select<Memo[]>(
         `SELECT m.* FROM memos m
          JOIN memo_tags mt ON m.id = mt.memo_id
@@ -103,5 +167,5 @@ export const getDatesWithMemos = async (): Promise<string[]> => {
     const res = await db.select<{date: string}[]>(
         "SELECT DISTINCT date(created_at) as date FROM memos"
     );
-    return res.map(r => r.date);
+    return res.map((r: {date: string}) => r.date);
 };

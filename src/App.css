@@ -181,6 +181,37 @@
   position: relative;
 }
 
+.main-content.dragging {
+  background-color: var(--bg-accent);
+}
+
+.drag-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(99, 102, 241, 0.15);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+  border: 2px dashed var(--accent-color);
+  border-radius: 12px;
+}
+
+.drag-message {
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
 .chat-header {
   height: 60px;
   padding: 0 24px;
@@ -297,7 +328,82 @@
   background-color: var(--bg-primary);
   border-top: 1px solid var(--border-color);
 }
+/* ... existing content ... */
 
+/* Media UI */
+.media-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.media-item {
+  position: relative;
+  max-width: 100%;
+}
+
+.attached-media {
+  max-width: 300px;
+  max-height: 250px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+}
+
+.pending-media-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0 12px;
+}
+
+.pending-media-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-color);
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.pending-media-item button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.pending-media-item button:hover {
+  color: #ef4444;
+}
+
+.attach-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.attach-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
 .input-box {
   display: flex;
   background-color: var(--bg-secondary);
