@@ -39,6 +39,7 @@ jobs:
         with:
           tagName: ${{ github.event.inputs.version }}
           releaseName: "ChatLikeMemo ${{ github.event.inputs.version }}"
-          releaseBody: "Here are the installation binaries for Windows and Mac."
+          releaseBody: "Windowsの方は `.msi` (インストーラー) か、もしくはインストール不要のそのまま動くポータブル版として `ChatLikeMemo.exe` をダウンロードしてご利用いただけます！\nMacの方は `.dmg` か `.app.tar.gz` をお使いください。"
           releaseDraft: true
           prerelease: false
+          includeRelease: true
