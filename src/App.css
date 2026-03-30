@@ -299,6 +299,24 @@
   word-break: break-word;
   line-height: 1.6;
 }
+.message-content p {
+  margin: 0 0 0.5em 0;
+}
+.message-content p:last-child {
+  margin: 0;
+}
+.message-content pre {
+  background: var(--bg-primary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.message-content code {
+  font-family: monospace;
+  background: var(--bg-primary);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
 
 .message-time {
   font-size: 0.75rem;

@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage } from 'lucide-react';
+import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload } from 'lucide-react';
 import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile } from './lib/db';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 
 export type PendingFile = {
     file?: File;
@@ -13,9 +17,13 @@ export type PendingFile = {
 };
 
 const extractTags = (text: string): string[] => {
-  const matches = text.match(/#[\w\u3040-\u30FF\u4E00-\u9FFF]+/g);
+  const matches = text.match(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
   if (!matches) return [];
   return Array.from(new Set(matches.map(tag => tag.slice(1))));
+};
+
+const preprocessMarkdown = (text: string) => {
+  return text.replace(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g, '[#$1](#search-$1)');
 };
 
 function App() {
@@ -200,25 +208,85 @@ function App() {
     setSearchQuery('');
   };
 
-  const renderTextWithTags = (text: string) => {
-    const parts = text.split(/(#[\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('#')) {
-        return (
-          <span 
-            key={index} 
-            className="tag-highlight"
-            onClick={() => {
-              clearFilters();
-              setFilterTag(part.slice(1));
-            }}
-          >
-            {part}
-          </span>
-        );
+  const exportMemosToMarkdown = async () => {
+    try {
+      const filePath = await save({
+        filters: [{
+          name: 'Markdown',
+          extensions: ['md']
+        }]
+      });
+      if (!filePath) return;
+
+      let mdContent = `# ChatLikeMemo Export\n\n`;
+      if (filterDate) mdContent += `**Filter:** Date: ${filterDate}\n\n`;
+      if (filterTag) mdContent += `**Filter:** Tag: #${filterTag}\n\n`;
+      if (searchQuery) mdContent += `**Filter:** Search: "${searchQuery}"\n\n`;
+
+      memos.forEach(m => {
+        mdContent += `### ${formatTime(m.created_at)}\n\n`;
+        mdContent += `${m.content}\n\n`;
+        if (m.media && m.media.length > 0) {
+           mdContent += `*Attached Media: ${m.media.length} items*\n\n`;
+        }
+        mdContent += `---\n\n`;
+      });
+
+      await writeTextFile(filePath, mdContent);
+      alert('Export successful!');
+    } catch (e: any) {
+      alert(`Export failed: ${e?.message || e}`);
+    }
+  };
+
+  const importMemosFromMarkdown = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      });
+      if (!selected) return;
+
+      const path = Array.isArray(selected) ? selected[0] : (selected as string);
+      const content = await readTextFile(path);
+
+      if (content.startsWith('# ChatLikeMemo Export')) {
+        const chunks = content.split('---');
+        let importedCount = 0;
+        for (const chunk of chunks) {
+          if (!chunk.trim() || chunk.trim() === '# ChatLikeMemo Export') continue;
+          
+          let text = chunk.trim();
+          const lines = text.split('\n');
+          if (lines[0].startsWith('### ')) {
+            lines.shift();
+            text = lines.join('\n').trim();
+          }
+          if (lines[0]?.startsWith('**Filter:**')) {
+             lines.shift(); // Ignore filter headers
+             text = lines.join('\n').trim();
+          }
+          
+          text = text.replace(/\*Attached Media: \d+ items\*/g, '').trim();
+
+          if (text) {
+             const tags = extractTags(text);
+             await addMemo(text, tags, []);
+             importedCount++;
+          }
+        }
+        alert(`Successfully imported ${importedCount} memos!`);
+      } else {
+        const tags = extractTags(content);
+        await addMemo(content.trim(), tags, []);
+        alert('Successfully imported Markdown as a new memo!');
       }
-      return part;
-    });
+
+      await loadMemos();
+      await loadActiveDates();
+    } catch (e: any) {
+      alert(`Import failed: ${e?.message || e}`);
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -227,7 +295,8 @@ function App() {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      second: '2-digit'
     }).format(date);
   };
 
@@ -313,6 +382,24 @@ function App() {
             <span>Calendar</span>
           </div>
           {renderCalendar()}
+
+          <div 
+            className="widget-title action-item" 
+            style={{marginTop: 24, cursor: 'pointer', color: 'var(--accent-color)'}} 
+            onClick={exportMemosToMarkdown}
+          >
+            <Download size={16} />
+            <span>Export to MD</span>
+          </div>
+
+          <div 
+            className="widget-title action-item" 
+            style={{marginTop: 8, cursor: 'pointer', color: 'var(--accent-color)'}} 
+            onClick={importMemosFromMarkdown}
+          >
+            <Upload size={16} />
+            <span>Import from MD</span>
+          </div>
         </div>
       </div>
 
@@ -351,8 +438,33 @@ function App() {
             memos.map((memo) => (
               <div key={memo.id} className="message-bubble">
                 {memo.content && (
-                  <div className="message-content">
-                    {renderTextWithTags(memo.content)}
+                  <div className="message-content markdown-body">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({node, href, children, ...props}) => {
+                          if (href?.startsWith('#search-')) {
+                            const tag = href.replace('#search-', '');
+                            return (
+                              <span 
+                                className="tag-highlight" 
+                                style={{cursor: 'pointer'}}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  clearFilters();
+                                  setFilterTag(tag);
+                                }}
+                              >
+                                {children}
+                              </span>
+                            );
+                          }
+                          return <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>;
+                        }
+                      }}
+                    >
+                      {preprocessMarkdown(memo.content)}
+                    </ReactMarkdown>
                   </div>
                 )}
                 

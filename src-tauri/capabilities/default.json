@@ -15,23 +15,44 @@
     "fs:default",
     {
       "identifier": "fs:allow-read",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-copy-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-write",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-exists",
-      "allow": [{ "path": "**" }]
-    }
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    "dialog:default"
   ]
 }
