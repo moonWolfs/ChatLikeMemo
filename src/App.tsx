@@ -638,10 +638,7 @@ function App() {
                 </div>
               ) : (
                 <div className="message-bubble" key={memo.id}>
-                  <div className="message-actions">
-                      <button onClick={() => { setEditingMemoId(memo.id); setEditContent(memo.content); }} title="Edit"><Pencil size={16} /></button>
-                      <button onClick={() => handleDelete(memo.id)} title="Delete"><Trash size={16} /></button>
-                  </div>
+ 
                   
                   {memo.content && (
                     <div className="message-content markdown-body">
@@ -700,34 +697,51 @@ function App() {
 
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 10}}>
                      <span className="message-time">{formatTime(memo.created_at)}</span>
-                     <button 
-                       onClick={() => handleToggleStar(memo)} 
-                       title={memo.is_starred ? "Unstar" : "Favorite"}
-                       style={{
-                         background: memo.is_starred ? 'rgba(255,179,0,0.12)' : 'none',
-                         border: memo.is_starred ? '1px solid rgba(255,179,0,0.3)' : '1px solid transparent',
-                         borderRadius: 20,
-                         cursor: 'pointer',
-                         padding: '3px 10px',
-                         display: 'flex', alignItems: 'center', gap: 4,
-                         color: memo.is_starred ? '#ffb300' : 'var(--text-secondary)',
-                         fontSize: '0.75rem',
-                         transition: 'all 0.2s',
-                       }}
-                       onMouseEnter={e => {
-                         (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,179,0,0.15)';
-                         (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,179,0,0.5)';
-                         (e.currentTarget as HTMLButtonElement).style.color = '#ffb300';
-                       }}
-                       onMouseLeave={e => {
-                         (e.currentTarget as HTMLButtonElement).style.background = memo.is_starred ? 'rgba(255,179,0,0.12)' : 'none';
-                         (e.currentTarget as HTMLButtonElement).style.borderColor = memo.is_starred ? 'rgba(255,179,0,0.3)' : 'transparent';
-                         (e.currentTarget as HTMLButtonElement).style.color = memo.is_starred ? '#ffb300' : 'var(--text-secondary)';
-                       }}
-                     >
-                        <Star size={13} fill={memo.is_starred ? '#ffb300' : 'none'} color="currentColor" />
-                        {memo.is_starred ? 'Starred' : 'Star'}
-                     </button>
+                     <div style={{display:'flex', alignItems:'center', gap: 4}}>
+                       <button
+                         onClick={() => { setEditingMemoId(memo.id); setEditContent(memo.content); }}
+                         title="Edit"
+                         style={{
+                           background: 'none', border: '1px solid transparent', borderRadius: 20,
+                           cursor: 'pointer', padding: '3px 10px', display: 'flex', alignItems: 'center', gap: 4,
+                           color: 'var(--text-secondary)', fontSize: '0.75rem', transition: 'all 0.2s',
+                         }}
+                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-secondary)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-color)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
+                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+                       >
+                         <Pencil size={12} /> Edit
+                       </button>
+                       <button
+                         onClick={() => handleDelete(memo.id)}
+                         title="Delete"
+                         style={{
+                           background: 'none', border: '1px solid transparent', borderRadius: 20,
+                           cursor: 'pointer', padding: '3px 10px', display: 'flex', alignItems: 'center', gap: 4,
+                           color: 'var(--text-secondary)', fontSize: '0.75rem', transition: 'all 0.2s',
+                         }}
+                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.1)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(220,38,38,0.3)'; (e.currentTarget as HTMLButtonElement).style.color = '#dc2626'; }}
+                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+                       >
+                         <Trash size={12} /> Delete
+                       </button>
+                       <button
+                         onClick={() => handleToggleStar(memo)}
+                         title={memo.is_starred ? 'Unstar' : 'Favorite'}
+                         style={{
+                           background: memo.is_starred ? 'rgba(255,179,0,0.12)' : 'none',
+                           border: memo.is_starred ? '1px solid rgba(255,179,0,0.3)' : '1px solid transparent',
+                           borderRadius: 20, cursor: 'pointer', padding: '3px 10px',
+                           display: 'flex', alignItems: 'center', gap: 4,
+                           color: memo.is_starred ? '#ffb300' : 'var(--text-secondary)',
+                           fontSize: '0.75rem', transition: 'all 0.2s',
+                         }}
+                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,179,0,0.15)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,179,0,0.5)'; (e.currentTarget as HTMLButtonElement).style.color = '#ffb300'; }}
+                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = memo.is_starred ? 'rgba(255,179,0,0.12)' : 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = memo.is_starred ? 'rgba(255,179,0,0.3)' : 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = memo.is_starred ? '#ffb300' : 'var(--text-secondary)'; }}
+                       >
+                         <Star size={12} fill={memo.is_starred ? '#ffb300' : 'none'} color="currentColor" />
+                         {memo.is_starred ? 'Starred' : 'Star'}
+                       </button>
+                     </div>
                   </div>
                 </div>
               )
