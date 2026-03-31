@@ -324,19 +324,24 @@ function App() {
       await loadAllTags();
   };
 
-  const handleToggleTodo = async (memo: Memo, lineNumber: number, isChecked: boolean) => {
+  const handleToggleTodo = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
       const lines = memo.content.split('\n');
-      if (lineNumber > 0 && lineNumber <= lines.length) {
-          const line = lines[lineNumber - 1];
-          const newLine = line.replace(/\[[ xX]\]/, isChecked ? '[x]' : '[ ]');
-          lines[lineNumber - 1] = newLine;
-          const newContent = lines.join('\n');
-          const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
-          const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
-          await updateMemoContent(memo.id, newContent, tags);
-          await loadMemos();
-          await loadAllTags();
+      let count = -1;
+      for (let i = 0; i < lines.length; i++) {
+          if (/- \[[ xX]\]/.test(lines[i])) {
+              count++;
+              if (count === checkboxIndex) {
+                  lines[i] = lines[i].replace(/\[[ xX]\]/, isChecked ? '[x]' : '[ ]');
+                  break;
+              }
+          }
       }
+      const newContent = lines.join('\n');
+      const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
+      const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
+      await updateMemoContent(memo.id, newContent, tags);
+      await loadMemos();
+      await loadAllTags();
   };
 
   const exportMemosToMarkdown = async () => {
@@ -642,6 +647,7 @@ function App() {
                   
                   {memo.content && (
                     <div className="message-content markdown-body">
+                      {(() => { let cbIdx = 0; return (
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -659,16 +665,19 @@ function App() {
                             }
                             return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
                           },
-                          input: ({ node, checked, ...props }) => {
+                          input: ({ checked, ...props }) => {
                               if (props.type === 'checkbox') {
+                                  const myIdx = cbIdx;
+                                  cbIdx++;
                                   return (
-                                      <input 
-                                          type="checkbox" 
-                                          checked={checked} 
-                                          onChange={(e) => {
-                                              const line = node?.position?.start?.line;
-                                              if (line) handleToggleTodo(memo, line, e.target.checked);
-                                          }} 
+                                      <input
+                                          type="checkbox"
+                                          defaultChecked={!!checked}
+                                          key={`cb-${memo.id}-${myIdx}-${!!checked}`}
+                                          onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                                              e.preventDefault();
+                                              handleToggleTodo(memo, myIdx, !checked);
+                                          }}
                                       />
                                   );
                               }
@@ -678,6 +687,7 @@ function App() {
                       >
                         {preprocessMarkdown(memo.content)}
                       </ReactMarkdown>
+                      ); })()}
                     </div>
                   )}
                   
