@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload } from 'lucide-react';
-import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag } from './lib/db';
+import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings } from 'lucide-react';
+import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag, getConfig, migrateDataDirectory } from './lib/db';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
+import { appDataDir } from '@tauri-apps/api/path';
 
 export type PendingFile = {
     file?: File;
@@ -42,6 +43,8 @@ function App() {
   const [pendingMedia, setPendingMedia] = useState<PendingFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentDataDir, setCurrentDataDir] = useState<string>('Loading...');
   
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -67,6 +70,39 @@ function App() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  useEffect(() => {
+    const fetchDir = async () => {
+       const config = await getConfig();
+       if (config.customDataDir) {
+           setCurrentDataDir(config.customDataDir);
+       } else {
+           setCurrentDataDir(await appDataDir());
+       }
+    };
+    if (showSettings) {
+        fetchDir();
+    }
+  }, [showSettings]);
+
+  const handleChangeDataDir = async () => {
+      try {
+          const selected = await open({
+              directory: true,
+              multiple: false,
+              title: "Select Data Directory"
+          });
+          if (!selected) return;
+          const newPath = Array.isArray(selected) ? selected[0] : (selected as string);
+          
+          await migrateDataDirectory(newPath);
+          alert("Directory changed successfully! The application will now restart to apply changes.");
+          window.location.reload();
+      } catch (e: any) {
+          console.error(e);
+          alert(`Failed to change directory: ${e.message || e}`);
+      }
   };
 
   // Native Tauri File Drop
@@ -364,8 +400,15 @@ function App() {
   return (
     <div className="app-container">
       <div className="sidebar">
-        <div className="sidebar-header">
+        <div className="sidebar-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
           <h1>ChatLikeMemo</h1>
+          <button 
+            onClick={() => setShowSettings(true)} 
+            style={{background:'none', border:'none', color:'var(--text-secondary)', cursor:'pointer', display: 'flex'}}
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
         </div>
         
         <div className="sidebar-content">
@@ -589,6 +632,35 @@ function App() {
           </div>
         </div>
       </div>
+
+      {showSettings && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2 style={{marginTop: 0}}>Settings</h2>
+            
+            <div style={{marginBottom: 20}}>
+               <label style={{fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)'}}>Current Data Directory:</label>
+               <div style={{background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 8, marginTop: 4, wordBreak: 'break-all', fontSize: '0.85rem'}}>
+                  {currentDataDir}
+               </div>
+            </div>
+
+            <button onClick={handleChangeDataDir} className="send-button" style={{width: 'auto', padding: '0 16px', borderRadius: 8}}>
+               Change Data Directory
+            </button>
+            <p style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 12}}>
+               Note: Changing the directory will securely copy your database and attached media to the new location. The app will restart automatically to load the new config.
+            </p>
+
+            <button 
+               onClick={() => setShowSettings(false)} 
+               style={{position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer'}}
+            >
+               <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

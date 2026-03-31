@@ -1,13 +1,73 @@
 import Database from '@tauri-apps/plugin-sql';
 import { appDataDir, join } from '@tauri-apps/api/path';
-import { mkdir, exists } from '@tauri-apps/plugin-fs';
+import { mkdir, exists, readTextFile, writeTextFile, copyFile, readDir } from '@tauri-apps/plugin-fs';
 
 let dbPromise: Promise<Database> | null = null;
+let cachedConfig: { customDataDir?: string } | null = null;
+
+export const getConfig = async (): Promise<{ customDataDir?: string }> => {
+    if (cachedConfig) return cachedConfig;
+    try {
+        const appData = await appDataDir();
+        const configPath = await join(appData, 'config.json');
+        if (await exists(configPath)) {
+            const content = await readTextFile(configPath);
+            cachedConfig = JSON.parse(content);
+            return cachedConfig!;
+        }
+    } catch (e) {
+        console.warn("No custom config found or error reading", e);
+    }
+    return {};
+};
+
+export const migrateDataDirectory = async (newPath: string) => {
+    const config = await getConfig();
+    const appData = await appDataDir();
+    const currentRoot = config.customDataDir || appData;
+    
+    // Copy DB files (including SHM and WAL for sqlite)
+    const files = ['chatmemo.db', 'chatmemo.db-wal', 'chatmemo.db-shm'];
+    for (const file of files) {
+        const currentPath = await join(currentRoot, file);
+        const newDbPath = await join(newPath, file);
+        if (await exists(currentPath)) {
+            await copyFile(currentPath, newDbPath);
+        }
+    }
+
+    // Copy Media
+    const currentMediaDir = await join(currentRoot, 'media');
+    const newMediaDir = await join(newPath, 'media');
+    if (await exists(currentMediaDir)) {
+        if (!await exists(newMediaDir)) {
+            await mkdir(newMediaDir, { recursive: true });
+        }
+        const entries = await readDir(currentMediaDir);
+        for (const entry of entries) {
+            if (entry.isFile) {
+                await copyFile(
+                    await join(currentMediaDir, entry.name),
+                    await join(newMediaDir, entry.name)
+                );
+            }
+        }
+    }
+
+    // Save configuration
+    const configPath = await join(appData, 'config.json');
+    await writeTextFile(configPath, JSON.stringify({ customDataDir: newPath }));
+};
 
 export const getDb = async () => {
     if (!dbPromise) {
         console.log("Loading DB...");
-        dbPromise = Database.load('sqlite:chatmemo.db').then(db => {
+        dbPromise = getConfig().then(config => {
+            const dbPath = config.customDataDir 
+                ? `sqlite:${config.customDataDir}/chatmemo.db`
+                : 'sqlite:chatmemo.db';
+            return Database.load(dbPath);
+        }).then(db => {
             console.log("DB Loaded successfully!");
             return db;
         }).catch((e: any) => {
@@ -53,8 +113,9 @@ const hydrateMemosWithMedia = async (memos: Memo[]) => {
 
 export const saveMediaFile = async (source: File | string): Promise<string> => {
     try {
-        const appData = await appDataDir();
-        const mediaDir = await join(appData, 'media');
+        const config = await getConfig();
+        const rootDir = config.customDataDir || await appDataDir();
+        const mediaDir = await join(rootDir, 'media');
         
         const dirExists = await exists(mediaDir);
         if (!dirExists) {
