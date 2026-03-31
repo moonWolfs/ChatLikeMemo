@@ -18,12 +18,26 @@ export type PendingFile = {
     previewUrl?: string;
 };
 
+// Module-level cache: survives re-renders, cleared only on page refresh
+const ogCache = new Map<string, {title?: string, description?: string, image?: string}>();
+
 const LinkPreview = ({ url }: { url: string }) => {
-    const [data, setData] = useState<{title?: string, description?: string, image?: string} | null>(null);
+    const [data, setData] = useState<{title?: string, description?: string, image?: string} | null>(
+        () => ogCache.get(url) ?? null   // initialise from cache synchronously → no flicker
+    );
+
     useEffect(() => {
+        if (ogCache.has(url)) return;    // already cached, skip fetch entirely
         invoke<{title?: string, description?: string, image?: string}>('fetch_og_data', { url })
-            .then(setData)
-            .catch(() => setData({ title: url }));
+            .then(d => {
+                ogCache.set(url, d);
+                setData(d);
+            })
+            .catch(() => {
+                const fallback = { title: url };
+                ogCache.set(url, fallback);
+                setData(fallback);
+            });
     }, [url]);
 
     if (!data) return <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>;
