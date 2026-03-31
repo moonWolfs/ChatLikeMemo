@@ -1,0 +1,1 @@
+ALTER TABLE memos ADD COLUMN is_starred BOOLEAN DEFAULT 0;

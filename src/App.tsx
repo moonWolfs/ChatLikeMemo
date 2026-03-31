@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings } from 'lucide-react';
-import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag, getConfig, migrateDataDirectory } from './lib/db';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings, Star, Pencil, Trash } from 'lucide-react';
+import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag, getConfig, migrateDataDirectory, deleteMemo, updateMemoContent, toggleMemoStar, getStarredMemos } from './lib/db';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,29 @@ export type PendingFile = {
     path?: string;
     name: string;
     type: 'image' | 'video';
+    previewUrl?: string;
+};
+
+const LinkPreview = ({ url }: { url: string }) => {
+    const [data, setData] = useState<{title?: string, description?: string, image?: string} | null>(null);
+    useEffect(() => {
+        invoke<{title?: string, description?: string, image?: string}>('fetch_og_data', { url })
+            .then(setData)
+            .catch(() => setData({ title: url }));
+    }, [url]);
+
+    if (!data) return <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>;
+
+    return (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="link-preview-card">
+            {data.image && <img src={data.image} alt={data.title} className="link-preview-image" />}
+            <div className="link-preview-content">
+                <div className="link-preview-title">{data.title || url}</div>
+                {data.description && <div className="link-preview-desc">{data.description}</div>}
+                <div className="link-preview-url">{url}</div>
+            </div>
+        </a>
+    );
 };
 
 const extractTags = (text: string): string[] => {
@@ -24,7 +47,7 @@ const extractTags = (text: string): string[] => {
 };
 
 const preprocessMarkdown = (text: string) => {
-  return text.replace(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g, '[#$1](#search-$1)');
+  return text.replace(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g, '[#$1](#search-tag-$1)');
 };
 
 function App() {
@@ -35,6 +58,7 @@ function App() {
   // Filters
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterStarred, setFilterStarred] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Input
@@ -45,6 +69,10 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [currentDataDir, setCurrentDataDir] = useState<string>('Loading...');
+
+  // Editing state
+  const [editingMemoId, setEditingMemoId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState<string>('');
   
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -57,7 +85,7 @@ function App() {
     loadMemos();
     loadActiveDates();
     loadAllTags();
-  }, [filterDate, filterTag, searchQuery]);
+  }, [filterDate, filterTag, searchQuery, filterStarred]);
 
   useEffect(() => {
     scrollToBottom();
@@ -147,15 +175,19 @@ function App() {
 
   const loadMemos = async () => {
     try {
-      if (filterDate) {
-        setMemos(await getMemosByDate(filterDate));
+      let fetched: Memo[];
+      if (searchQuery.trim()) {
+        fetched = await getMemosByQuery(searchQuery.trim());
+      } else if (filterDate) {
+        fetched = await getMemosByDate(filterDate);
       } else if (filterTag) {
-        setMemos(await getMemosByTag(filterTag));
-      } else if (searchQuery.trim()) {
-        setMemos(await getMemosByQuery(searchQuery.trim()));
+        fetched = await getMemosByTag(filterTag);
+      } else if (filterStarred) {
+        fetched = await getStarredMemos();
       } else {
-        setMemos(await getMemos());
+        fetched = await getMemos();
       }
+      setMemos(fetched);
     } catch (e: any) {
       console.error("Failed to load memos", e);
       alert(`Error loading memos: ${e?.message || e}`);
@@ -253,7 +285,46 @@ function App() {
   const clearFilters = () => {
     setFilterDate(null);
     setFilterTag(null);
+    setFilterStarred(false);
     setSearchQuery('');
+  };
+
+  const handleDelete = async (id: number) => {
+      if (confirm("Are you sure you want to delete this memo?")) {
+          await deleteMemo(id);
+          await loadMemos();
+          await loadActiveDates();
+          await loadAllTags();
+      }
+  };
+
+  const handleToggleStar = async (memo: Memo) => {
+      await toggleMemoStar(memo.id, memo.is_starred || 0);
+      await loadMemos();
+  };
+
+  const handleSaveEdit = async (id: number) => {
+      const tagMatches = editContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
+      const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
+      await updateMemoContent(id, editContent, tags);
+      setEditingMemoId(null);
+      await loadMemos();
+      await loadAllTags();
+  };
+
+  const handleToggleTodo = async (memo: Memo, lineNumber: number, isChecked: boolean) => {
+      const lines = memo.content.split('\n');
+      if (lineNumber > 0 && lineNumber <= lines.length) {
+          const line = lines[lineNumber - 1];
+          const newLine = line.replace(/\[[ xX]\]/, isChecked ? '[x]' : '[ ]');
+          lines[lineNumber - 1] = newLine;
+          const newContent = lines.join('\n');
+          const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
+          const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
+          await updateMemoContent(memo.id, newContent, tags);
+          await loadMemos();
+          await loadAllTags();
+      }
   };
 
   const exportMemosToMarkdown = async () => {
@@ -475,6 +546,21 @@ function App() {
 
           <div 
             className="widget-title action-item" 
+            style={{
+                marginTop: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                color: filterStarred ? 'var(--accent-color)' : 'var(--text-secondary)'
+            }} 
+            onClick={() => {
+              if (filterStarred) { setFilterStarred(false); }
+              else { clearFilters(); setFilterStarred(true); }
+            }}
+          >
+            <Star size={16} fill={filterStarred ? 'currentColor' : 'none'} />
+            <span style={{fontWeight: filterStarred ? 600 : 400}}>Starred Favorites</span>
+          </div>
+
+          <div 
+            className="widget-title action-item" 
             style={{marginTop: 32, cursor: 'pointer', color: 'var(--accent-color)'}} 
             onClick={exportMemosToMarkdown}
           >
@@ -526,54 +612,89 @@ function App() {
             </div>
           ) : (
             memos.map((memo) => (
-              <div key={memo.id} className="message-bubble">
-                {memo.content && (
-                  <div className="message-content markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({node, href, children, ...props}) => {
-                          if (href?.startsWith('#search-')) {
-                            const tag = href.replace('#search-', '');
-                            return (
-                              <span 
-                                className="tag-highlight" 
-                                style={{cursor: 'pointer'}}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  clearFilters();
-                                  setFilterTag(tag);
-                                }}
-                              >
-                                {children}
-                              </span>
-                            );
+              editingMemoId === memo.id ? (
+                <div className="message-bubble" key={memo.id} style={{padding: 16}}>
+                   <textarea 
+                      value={editContent} 
+                      onChange={e => setEditContent(e.target.value)} 
+                      style={{width: '100%', minHeight: 100, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: 8, padding: 8, fontFamily: 'inherit', resize: 'vertical'}}
+                   />
+                   <div style={{display:'flex', gap: 8, marginTop: 8}}>
+                       <button className="send-button" style={{width: 'auto', padding: '4px 12px'}} onClick={() => handleSaveEdit(memo.id)}>Save</button>
+                       <button style={{background:'none', border:'none', color:'var(--text-secondary)', cursor:'pointer', padding: '4px 12px'}} onClick={() => setEditingMemoId(null)}>Cancel</button>
+                   </div>
+                </div>
+              ) : (
+                <div className="message-bubble" key={memo.id}>
+                  <div className="message-actions">
+                      <button onClick={() => handleToggleStar(memo)} title="Star">
+                          <Star size={16} fill={memo.is_starred ? '#ffb300' : 'none'} color={memo.is_starred ? '#ffb300' : 'currentColor'} />
+                      </button>
+                      <button onClick={() => { setEditingMemoId(memo.id); setEditContent(memo.content); }} title="Edit"><Pencil size={16} /></button>
+                      <button onClick={() => handleDelete(memo.id)} title="Delete"><Trash size={16} /></button>
+                  </div>
+                  
+                  {memo.content && (
+                    <div className="message-content markdown-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({node, href, children, ...props}) => {
+                            if (href && href.startsWith('#search-tag-')) {
+                              const tag = href.replace('#search-tag-', '');
+                              return (
+                                <span className="tag-highlight" style={{cursor: 'pointer'}} onClick={(e) => { e.preventDefault(); clearFilters(); setFilterTag(tag); }}>
+                                  {children}
+                                </span>
+                              );
+                            }
+                            if (node?.children?.length === 1 && node.children[0].type === 'text' && node.children[0].value === href) {
+                              return <LinkPreview url={href} />;
+                            }
+                            return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+                          },
+                          input: ({ node, checked, ...props }) => {
+                              if (props.type === 'checkbox') {
+                                  return (
+                                      <input 
+                                          type="checkbox" 
+                                          checked={checked} 
+                                          onChange={(e) => {
+                                              const line = node?.position?.start?.line;
+                                              if (line) handleToggleTodo(memo, line, e.target.checked);
+                                          }} 
+                                      />
+                                  );
+                              }
+                              return <input {...props} />;
                           }
-                          return <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>;
-                        }
-                      }}
-                    >
-                      {preprocessMarkdown(memo.content)}
-                    </ReactMarkdown>
-                  </div>
-                )}
-                
-                {memo.media && memo.media.length > 0 && (
-                  <div className="media-grid">
-                    {memo.media.map(m => (
-                      <div key={m.id} className="media-item">
-                        {m.media_type === 'image' ? (
-                          <img src={convertFileSrc(m.file_path)} alt="Attached" className="attached-media" />
-                        ) : (
-                          <video src={convertFileSrc(m.file_path)} controls className="attached-media" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        }}
+                      >
+                        {preprocessMarkdown(memo.content)}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                  
+                  {memo.media && memo.media.length > 0 && (
+                    <div className="media-grid">
+                      {memo.media.map(m => (
+                        <div key={m.id} className="media-item">
+                          {m.media_type === 'image' ? (
+                            <img src={m.file_path.startsWith('asset://') ? m.file_path : convertFileSrc(m.file_path)} alt="Attached" className="attached-media" />
+                          ) : (
+                            <video src={m.file_path.startsWith('asset://') ? m.file_path : convertFileSrc(m.file_path)} controls className="attached-media" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                <span className="message-time">{formatTime(memo.created_at)}</span>
-              </div>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 8}}>
+                     <span className="message-time">{formatTime(memo.created_at)}</span>
+                     {memo.is_starred === 1 ? <Star size={12} fill="#ffb300" color="#ffb300" style={{opacity: 0.8}} /> : <span></span>}
+                  </div>
+                </div>
+              )
             ))
           )}
           <div ref={messagesEndRef} />

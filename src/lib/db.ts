@@ -1,6 +1,6 @@
 import Database from '@tauri-apps/plugin-sql';
 import { appDataDir, join } from '@tauri-apps/api/path';
-import { mkdir, exists, readTextFile, writeTextFile, copyFile, readDir } from '@tauri-apps/plugin-fs';
+import { mkdir, exists, readTextFile, writeTextFile, copyFile, readDir, remove } from '@tauri-apps/plugin-fs';
 
 let dbPromise: Promise<Database> | null = null;
 let cachedConfig: { customDataDir?: string } | null = null;
@@ -91,6 +91,7 @@ export interface Memo {
     id: number;
     content: string;
     created_at: string;
+    is_starred?: number;
     media?: Media[];
 }
 
@@ -237,4 +238,57 @@ export const getAllTags = async (): Promise<Tag[]> => {
     return db.select<Tag[]>(
         "SELECT DISTINCT t.* FROM tags t JOIN memo_tags mt ON t.id = mt.tag_id ORDER BY t.name ASC"
     );
+};
+
+export const deleteMemo = async (id: number): Promise<void> => {
+    const db = await getDb();
+    
+    // 1. Fetch related media files to delete physically
+    const mediaRes = await db.select<Media[]>('SELECT * FROM memo_media WHERE memo_id = $1', [id]);
+    for (const m of mediaRes) {
+        try {
+            await remove(m.file_path);
+        } catch (e) {
+            console.warn("Failed to physically remove media", e);
+        }
+    }
+
+    // 2. Delete mappings
+    await db.execute('DELETE FROM memo_media WHERE memo_id = $1', [id]);
+    await db.execute('DELETE FROM memo_tags WHERE memo_id = $1', [id]);
+    
+    // 3. Delete memo
+    await db.execute('DELETE FROM memos WHERE id = $1', [id]);
+};
+
+export const updateMemoContent = async (id: number, newContent: string, newTags: string[]): Promise<void> => {
+    const db = await getDb();
+    
+    // Update content
+    await db.execute('UPDATE memos SET content = $1 WHERE id = $2', [newContent, id]);
+
+    // Update tags
+    await db.execute('DELETE FROM memo_tags WHERE memo_id = $1', [id]);
+    
+    if (newTags.length > 0) {
+        for (const tagName of newTags) {
+            await db.execute('INSERT OR IGNORE INTO tags (name) VALUES ($1)', [tagName]);
+            const tagRes = await db.select<{id: number}[]>('SELECT id FROM tags WHERE name = $1', [tagName]);
+            if (tagRes.length > 0) {
+                const tagId = tagRes[0].id;
+                await db.execute('INSERT INTO memo_tags (memo_id, tag_id) VALUES ($1, $2)', [id, tagId]);
+            }
+        }
+    }
+};
+
+export const toggleMemoStar = async (id: number, currentStatus: number): Promise<void> => {
+    const db = await getDb();
+    await db.execute('UPDATE memos SET is_starred = $1 WHERE id = $2', [currentStatus ? 0 : 1, id]);
+};
+
+export const getStarredMemos = async (): Promise<Memo[]> => {
+    const db = await getDb();
+    const memos = await db.select<Memo[]>('SELECT * FROM memos WHERE is_starred = 1 ORDER BY created_at ASC');
+    return hydrateMemosWithMedia(memos);
 };

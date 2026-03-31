@@ -1,7 +1,59 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use serde::{Deserialize, Serialize};
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[derive(Serialize)]
+pub struct OgData {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub image: Option<String>,
+}
+
+#[tauri::command]
+async fn fetch_og_data(url: String) -> Result<OgData, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; ChatLikeMemoBot/1.0)")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let text = res.text().await.map_err(|e| e.to_string())?;
+
+    let document = scraper::Html::parse_document(&text);
+    let meta_selector = scraper::Selector::parse("meta").unwrap();
+    let title_selector = scraper::Selector::parse("title").unwrap();
+
+    let mut data = OgData {
+        title: None,
+        description: None,
+        image: None,
+    };
+
+    // Fallback title from <title>
+    if let Some(title_elem) = document.select(&title_selector).next() {
+        data.title = Some(title_elem.text().collect::<Vec<_>>().concat().trim().to_string());
+    }
+
+    for element in document.select(&meta_selector) {
+        if let Some(property) = element.value().attr("property").or(element.value().attr("name")) {
+            if let Some(content) = element.value().attr("content") {
+                match property {
+                    "og:title" => data.title = Some(content.to_string()),
+                    "og:description" | "twitter:description" | "description" => {
+                        data.description = Some(content.to_string())
+                    }
+                    "og:image" | "twitter:image" => data.image = Some(content.to_string()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(data)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +90,12 @@ pub fn run() {
                     sql: include_str!("../migrations/2_media.sql"),
                     kind: tauri_plugin_sql::MigrationKind::Up,
                 },
+                tauri_plugin_sql::Migration {
+                    version: 3,
+                    description: "add_is_starred",
+                    sql: include_str!("../migrations/3_features.sql"),
+                    kind: tauri_plugin_sql::MigrationKind::Up,
+                },
             ];
 
             app.handle().plugin(
@@ -48,7 +106,7 @@ pub fn run() {
             
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, fetch_og_data])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
