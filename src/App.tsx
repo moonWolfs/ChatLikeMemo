@@ -101,9 +101,6 @@ function App() {
     loadAllTags();
   }, [filterDate, filterTag, searchQuery, filterStarred]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [memos]);
 
   const loadAllTags = async () => {
     try {
@@ -279,6 +276,7 @@ function App() {
       await loadMemos();
       await loadActiveDates();
       await loadAllTags();
+      scrollToBottom();
       setErrorMessage(null);
     } catch (e: any) {
       console.error("Failed to add memo", e);
