@@ -627,9 +627,6 @@ function App() {
               ) : (
                 <div className="message-bubble" key={memo.id}>
                   <div className="message-actions">
-                      <button onClick={() => handleToggleStar(memo)} title="Star">
-                          <Star size={16} fill={memo.is_starred ? '#ffb300' : 'none'} color={memo.is_starred ? '#ffb300' : 'currentColor'} />
-                      </button>
                       <button onClick={() => { setEditingMemoId(memo.id); setEditContent(memo.content); }} title="Edit"><Pencil size={16} /></button>
                       <button onClick={() => handleDelete(memo.id)} title="Delete"><Trash size={16} /></button>
                   </div>
@@ -691,7 +688,21 @@ function App() {
 
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 8}}>
                      <span className="message-time">{formatTime(memo.created_at)}</span>
-                     {memo.is_starred === 1 ? <Star size={12} fill="#ffb300" color="#ffb300" style={{opacity: 0.8}} /> : <span></span>}
+                     <button 
+                       onClick={() => handleToggleStar(memo)} 
+                       title={memo.is_starred ? "Unstar" : "Star"}
+                       className="star-button"
+                       style={{
+                         background: 'none', border: 'none', cursor: 'pointer',
+                         padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         color: memo.is_starred ? '#ffb300' : 'var(--text-secondary)',
+                         transition: 'transform 0.2s',
+                       }}
+                       onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                       onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                     >
+                        <Star size={16} fill={memo.is_starred ? '#ffb300' : 'none'} color="currentColor" />
+                     </button>
                   </div>
                 </div>
               )
