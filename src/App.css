@@ -2,16 +2,19 @@
   display: flex;
   height: 100vh;
   width: 100vw;
-  background-color: var(--bg-primary);
+  background-color: transparent;
 }
 
 /* Sidebar Styles */
 .sidebar {
   width: 320px;
   background-color: var(--bg-secondary);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  z-index: 10;
 }
 
 .sidebar-header {
@@ -49,11 +52,12 @@
   border-radius: 8px;
   padding: 8px 12px;
   gap: 8px;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
 }
 
 .search-input-wrapper:focus-within {
   border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 .search-input-wrapper input {
@@ -153,7 +157,7 @@
 
 .cal-day.has-memos {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .cal-dot {
@@ -179,10 +183,11 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  background-color: transparent;
 }
 
 .main-content.dragging {
-  background-color: var(--bg-accent);
+  background-color: rgba(99, 102, 241, 0.05);
 }
 
 .drag-overlay {
@@ -191,9 +196,9 @@
   left: 10px;
   right: 10px;
   bottom: 10px;
-  background: rgba(99, 102, 241, 0.15);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(99, 102, 241, 0.1);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -204,12 +209,15 @@
 }
 
 .drag-message {
-  background: var(--bg-secondary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   color: var(--accent-color);
   padding: 12px 24px;
   border-radius: 24px;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  box-shadow: var(--glass-shadow);
+  border: 1px solid var(--glass-border);
 }
 
 .chat-header {
@@ -218,9 +226,10 @@
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(24, 24, 27, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-secondary);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  z-index: 10;
 }
 
 .active-filter {
@@ -273,13 +282,15 @@
 
 .message-bubble {
   background-color: var(--bubble-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   padding: 12px 16px;
   border-radius: 12px;
   max-width: 80%;
   align-self: flex-start;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--glass-shadow);
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
 }
 
 @keyframes slideIn {
@@ -306,14 +317,15 @@
   margin: 0;
 }
 .message-content pre {
-  background: var(--bg-primary);
+  background: rgba(0, 0, 0, 0.2);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
+  border: 1px solid var(--border-color);
 }
 .message-content code {
   font-family: monospace;
-  background: var(--bg-primary);
+  background: rgba(0, 0, 0, 0.2);
   padding: 2px 4px;
   border-radius: 4px;
 }
@@ -343,10 +355,11 @@
 
 .input-container {
   padding: 20px 24px;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-secondary);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-top: 1px solid var(--border-color);
 }
-/* ... existing content ... */
 
 /* Media UI */
 .media-grid {
@@ -424,11 +437,11 @@
 }
 .input-box {
   display: flex;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   border-radius: 24px;
   padding: 8px 16px;
   border: 1px solid var(--border-color);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .input-box:focus-within {
@@ -490,9 +503,9 @@
 .modal-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -500,13 +513,15 @@
 }
 
 .modal-content {
-  background: var(--bg-primary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   padding: 24px;
   border-radius: 16px;
   width: 90%;
   max-width: 400px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
   position: relative;
 }
 
@@ -518,7 +533,7 @@
   border-radius: 8px;
   overflow: hidden;
   margin: 8px 0;
-  background: var(--bg-primary);
+  background: rgba(0, 0, 0, 0.1);
   color: var(--text-primary);
   transition: border-color 0.2s;
   max-width: 400px;
@@ -542,7 +557,7 @@
   background: var(--bg-secondary);
   padding: 4px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: var(--glass-shadow);
   border: 1px solid var(--border-color);
 }
 .message-bubble:hover .message-actions { opacity: 1; }

@@ -1,15 +1,51 @@
 :root {
-  --bg-primary: #121214;
-  --bg-secondary: #18181b;
-  --bg-accent: #27272a;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
+  /* Common Variables */
   --accent-color: #6366f1;
   --accent-hover: #4f46e5;
-  --border-color: #3f3f46;
-  --bubble-bg: #27272a;
-  --bubble-user: #4f46e5;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  
+  /* Glassmorphism Defaults */
+  --glass-blur: 12px;
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+[data-theme='dark'] {
+  --bg-primary: #0f172a;
+  --bg-secondary: rgba(30, 41, 59, 0.7);
+  --bg-accent: rgba(51, 65, 85, 0.7);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --bubble-bg: rgba(30, 41, 59, 0.6);
+  --glass-bg: rgba(15, 23, 42, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: rgba(241, 245, 249, 0.7);
+  --bg-accent: rgba(226, 232, 240, 0.7);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --bubble-bg: rgba(255, 255, 255, 0.6);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
+}
+
+/* Default to dark if no theme is set */
+:root:not([data-theme]) {
+  --bg-primary: #0f172a;
+  --bg-secondary: rgba(30, 41, 59, 0.7);
+  --bg-accent: rgba(51, 65, 85, 0.7);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --bubble-bg: rgba(30, 41, 59, 0.6);
+  --glass-bg: rgba(15, 23, 42, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -21,11 +57,25 @@
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-primary);
+  /* Added a subtle gradient to make glassmorphism look better */
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+  background-attachment: fixed;
   color: var(--text-primary);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden; /* App should control its own scroll areas */
+  overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-theme='light'] body {
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(215, 28%, 90%, 1) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(215, 25%, 85%, 1) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(215, 20%, 80%, 1) 0, transparent 50%);
 }
 
 /* Scrollbar styling for Webkit */

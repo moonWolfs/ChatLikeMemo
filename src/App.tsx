@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings, Star, Pencil, Trash } from 'lucide-react';
+import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings, Star, Pencil, Trash, Sun, Moon } from 'lucide-react';
 import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag, getConfig, migrateDataDirectory, deleteMemo, updateMemoContent, toggleMemoStar, getStarredMemos } from './lib/db';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -68,12 +68,25 @@ function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved as 'light' | 'dark') || 'dark';
+  });
   
   // Filters
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [filterStarred, setFilterStarred] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
   
   // Input
   const [inputText, setInputText] = useState('');
@@ -490,13 +503,22 @@ function App() {
       <div className="sidebar">
         <div className="sidebar-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
           <h1>ChatLikeMemo</h1>
-          <button 
-            onClick={() => setShowSettings(true)} 
-            style={{background:'none', border:'none', color:'var(--text-secondary)', cursor:'pointer', display: 'flex'}}
-            title="Settings"
-          >
-            <Settings size={20} />
-          </button>
+          <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+            <button 
+              onClick={toggleTheme} 
+              style={{background:'none', border:'none', color:'var(--text-secondary)', cursor:'pointer', display: 'flex'}}
+              title={theme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+            >
+              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
+            <button 
+              onClick={() => setShowSettings(true)} 
+              style={{background:'none', border:'none', color:'var(--text-secondary)', cursor:'pointer', display: 'flex'}}
+              title="Settings"
+            >
+              <Settings size={20} />
+            </button>
+          </div>
         </div>
         
         <div className="sidebar-content">
