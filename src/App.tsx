@@ -328,10 +328,10 @@ function App() {
       const lines = memo.content.split('\n');
       let count = -1;
       for (let i = 0; i < lines.length; i++) {
-          if (/- \[[ xX]\]/.test(lines[i])) {
+          if (/^\s*[-*]\s+\[[ xX]\]/.test(lines[i])) {
               count++;
               if (count === checkboxIndex) {
-                  lines[i] = lines[i].replace(/\[[ xX]\]/, isChecked ? '[x]' : '[ ]');
+                  lines[i] = lines[i].replace(/\[[ xX]\]/i, isChecked ? '[x]' : '[ ]');
                   break;
               }
           }
@@ -672,10 +672,9 @@ function App() {
                                   return (
                                       <input
                                           type="checkbox"
-                                          defaultChecked={!!checked}
+                                          checked={!!checked}
                                           key={`cb-${memo.id}-${myIdx}-${!!checked}`}
-                                          onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                                              e.preventDefault();
+                                          onChange={() => {
                                               handleToggleTodo(memo, myIdx, !checked);
                                           }}
                                       />
