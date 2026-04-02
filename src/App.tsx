@@ -54,21 +54,7 @@ const LinkPreview = ({ url }: { url: string }) => {
     );
 };
 
-// Optimistic checkbox that updates visually immediately, then syncs to DB
-const TodoCheckbox = ({ isChecked, onToggle }: { isChecked: boolean; onToggle: (v: boolean) => void }) => {
-    const [local, setLocal] = React.useState(isChecked);
-    React.useEffect(() => { setLocal(isChecked); }, [isChecked]);
-    return (
-        <input
-            type="checkbox"
-            checked={local}
-            onChange={(e) => {
-                setLocal(e.target.checked);
-                onToggle(e.target.checked);
-            }}
-        />
-    );
-};
+
 
 const extractTags = (text: string): string[] => {
   const matches = text.match(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
@@ -355,13 +341,27 @@ function App() {
 
   const handleToggleTodo = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
       let count = -1;
-      const newContent = memo.content.replace(/\[[ xX]\]/gi, (match) => {
+      // Regex matches: start of string or newline, then optional whitespace, then dash/asterisk, then space, then [ ]
+      const regex = /(^|\n)(\s*[-*]\s+)\[[ xX]\]/g;
+      const newContent = memo.content.replace(regex, (match, p1, p2) => {
           count++;
-          return count === checkboxIndex ? (isChecked ? '[x]' : '[ ]') : match;
+          if (count === checkboxIndex) {
+              return p1 + p2 + (isChecked ? '[x]' : '[ ]');
+          }
+          return match;
       });
-      console.log('[TODO] index:', checkboxIndex, 'isChecked:', isChecked);
-      console.log('[TODO] original:', memo.content);
-      console.log('[TODO] newContent:', newContent);
+
+      console.group('--- TODO TOGGLE DEBUG ---');
+      console.log('Target Index:', checkboxIndex, 'To Be Checked:', isChecked);
+      console.log('Original Content:', JSON.stringify(memo.content));
+      console.log('New Content:', JSON.stringify(newContent));
+      console.log('Change detected?', memo.content !== newContent);
+      console.groupEnd();
+
+      if (memo.content === newContent) {
+          console.warn('Checkbox toggle failed: No match found at index', checkboxIndex);
+      }
+
       const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
       const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
       await updateMemoContent(memo.id, newContent, tags);
@@ -704,10 +704,15 @@ function App() {
                                   const myIdx = cbIdx;
                                   cbIdx++;
                                   return (
-                                      <TodoCheckbox
+                                      <input
+                                          {...props}
+                                          type="checkbox"
+                                          checked={!!checked}
                                           key={`cb-${memo.id}-${myIdx}`}
-                                          isChecked={!!checked}
-                                          onToggle={(v) => handleToggleTodo(memo, myIdx, v)}
+                                          onChange={(e) => {
+                                              // We trigger the async update
+                                              handleToggleTodo(memo, myIdx, e.target.checked);
+                                          }}
                                       />
                                   );
                               }
