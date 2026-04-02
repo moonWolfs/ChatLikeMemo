@@ -54,6 +54,22 @@ const LinkPreview = ({ url }: { url: string }) => {
     );
 };
 
+// Optimistic checkbox that updates visually immediately, then syncs to DB
+const TodoCheckbox = ({ isChecked, onToggle }: { isChecked: boolean; onToggle: (v: boolean) => void }) => {
+    const [local, setLocal] = React.useState(isChecked);
+    React.useEffect(() => { setLocal(isChecked); }, [isChecked]);
+    return (
+        <input
+            type="checkbox"
+            checked={local}
+            onChange={(e) => {
+                setLocal(e.target.checked);
+                onToggle(e.target.checked);
+            }}
+        />
+    );
+};
+
 const extractTags = (text: string): string[] => {
   const matches = text.match(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
   if (!matches) return [];
@@ -692,13 +708,10 @@ function App() {
                                   const myIdx = cbIdx;
                                   cbIdx++;
                                   return (
-                                      <input
-                                          type="checkbox"
-                                          checked={!!checked}
-                                          key={`cb-${memo.id}-${myIdx}-${!!checked}`}
-                                          onChange={() => {
-                                              handleToggleTodo(memo, myIdx, !checked);
-                                          }}
+                                      <TodoCheckbox
+                                          key={`cb-${memo.id}-${myIdx}`}
+                                          isChecked={!!checked}
+                                          onToggle={(v) => handleToggleTodo(memo, myIdx, v)}
                                       />
                                   );
                               }
