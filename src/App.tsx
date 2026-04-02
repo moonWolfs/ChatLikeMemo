@@ -354,18 +354,14 @@ function App() {
   };
 
   const handleToggleTodo = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
-      const lines = memo.content.split('\n');
       let count = -1;
-      for (let i = 0; i < lines.length; i++) {
-          if (/^\s*[-*]\s+\[[ xX]\]/.test(lines[i])) {
-              count++;
-              if (count === checkboxIndex) {
-                  lines[i] = lines[i].replace(/\[[ xX]\]/i, isChecked ? '[x]' : '[ ]');
-                  break;
-              }
-          }
-      }
-      const newContent = lines.join('\n');
+      const newContent = memo.content.replace(/\[[ xX]\]/gi, (match) => {
+          count++;
+          return count === checkboxIndex ? (isChecked ? '[x]' : '[ ]') : match;
+      });
+      console.log('[TODO] index:', checkboxIndex, 'isChecked:', isChecked);
+      console.log('[TODO] original:', memo.content);
+      console.log('[TODO] newContent:', newContent);
       const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
       const tags = tagMatches ? [...new Set(tagMatches.map(t => t.slice(1)))] : [];
       await updateMemoContent(memo.id, newContent, tags);
