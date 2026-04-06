@@ -45,11 +45,11 @@ const LinkPreview = ({ url }: { url: string }) => {
     return (
         <a href={url} target="_blank" rel="noopener noreferrer" className="link-preview-card">
             {data.image && <img src={data.image} alt={data.title} className="link-preview-image" />}
-            <div className="link-preview-content">
-                <div className="link-preview-title">{data.title || url}</div>
-                {data.description && <div className="link-preview-desc">{data.description}</div>}
-                <div className="link-preview-url">{url}</div>
-            </div>
+            <span className="link-preview-content">
+                <span className="link-preview-title">{data.title || url}</span>
+                {data.description && <span className="link-preview-desc">{data.description}</span>}
+                <span className="link-preview-url">{url}</span>
+            </span>
         </a>
     );
 };
@@ -341,8 +341,8 @@ function App() {
 
   const handleToggleTodo = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
       let count = -1;
-      // Regex matches: start of string or newline, then optional whitespace, then dash/asterisk, then space, then [ ]
-      const regex = /(^|\n)(\s*[-*]\s+)\[[ xX]\]/g;
+      // Regex matches list items: -, *, +, 1. with any leading whitespace
+      const regex = /(^|\n)([\s]*[-*+]\s+|[\s]*\d+\.\s+)\[[ xX]\]/gi;
       const newContent = memo.content.replace(regex, (match, p1, p2) => {
           count++;
           if (count === checkboxIndex) {
@@ -685,6 +685,7 @@ function App() {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
+                          p: ({ children }) => <div className="p-div">{children}</div>,
                           a: ({node, href, children, ...props}) => {
                             if (href && href.startsWith('#search-tag-')) {
                               const tag = href.replace('#search-tag-', '');
@@ -701,16 +702,19 @@ function App() {
                           },
                           input: ({ checked, ...props }) => {
                               if (props.type === 'checkbox') {
-                                  const myIdx = cbIdx;
-                                  cbIdx++;
+                                  let myIdx = cbIdx++;
+                                  console.log(`[RENDER-INPUT] Memo:${memo.id}, Index:${myIdx}, Checked:${checked}`);
                                   return (
                                       <input
-                                          {...props}
+                                          // Ignore props.disabled so the user can click it
+                                          className={props.className}
                                           type="checkbox"
                                           checked={!!checked}
+                                          readOnly={false}
+                                          disabled={false}
                                           key={`cb-${memo.id}-${myIdx}`}
                                           onChange={(e) => {
-                                              // We trigger the async update
+                                              console.warn(`[CLICK-INPUT] Memo:${memo.id}, Index:${myIdx}, NewVal:${e.target.checked}`);
                                               handleToggleTodo(memo, myIdx, e.target.checked);
                                           }}
                                       />
