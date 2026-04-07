@@ -1,5 +1,5 @@
 import { visit } from 'unist-util-visit';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings, Star, Pencil, Trash, Sun, Moon } from 'lucide-react';
 import { getMemos, addMemo, Memo, getMemosByDate, getMemosByTag, getMemosByQuery, getDatesWithMemos, saveMediaFile, getAllTags, Tag, getConfig, migrateDataDirectory, deleteMemo, updateMemoContent, toggleMemoStar, getStarredMemos } from './lib/db';
@@ -78,6 +78,84 @@ const rehypeCheckboxIndex = () => {
     });
   };
 };
+
+const _remarkPlugins = [remarkGfm];
+const _rehypePlugins = [rehypeCheckboxIndex];
+
+const MemoMarkdownRenderer = React.memo(({ 
+    memo, 
+    clearFilters, 
+    setFilterTag, 
+    handleToggleTodoByIndex 
+}: { 
+    memo: Memo, 
+    clearFilters: () => void, 
+    setFilterTag: (tag: string) => void, 
+    handleToggleTodoByIndex: (m: Memo, idx: number, checked: boolean) => void 
+}) => {
+    const memoRef = useRef(memo);
+    const handlersRef = useRef({ clearFilters, setFilterTag, handleToggleTodoByIndex });
+    
+    // Always keep refs up to date
+    useEffect(() => {
+        memoRef.current = memo;
+        handlersRef.current = { clearFilters, setFilterTag, handleToggleTodoByIndex };
+    }, [memo, clearFilters, setFilterTag, handleToggleTodoByIndex]);
+
+    const components = useMemo(() => ({
+        p: ({ children }: any) => <div className="p-div">{children}</div>,
+        a: ({node, href, children, ...props}: any) => {
+            if (href && href.startsWith('#search-tag-')) {
+                const tag = href.replace('#search-tag-', '');
+                return (
+                    <span className="tag-highlight" style={{cursor: 'pointer'}} onClick={(e) => { 
+                        e.preventDefault(); 
+                        handlersRef.current.clearFilters(); 
+                        handlersRef.current.setFilterTag(tag); 
+                    }}>
+                        {children}
+                    </span>
+                );
+            }
+            if (node?.children?.length === 1 && node.children[0].type === 'text' && node.children[0].value === href) {
+                return <LinkPreview url={href} />;
+            }
+            return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+        },
+        input: ({ node, checked, ...props }: any) => {
+            if (props.type === 'checkbox') {
+                const astIdx = props['data-checkbox-index'];
+                return (
+                    <input
+                        {...props}
+                        type="checkbox"
+                        checked={!!checked}
+                        readOnly={false}
+                        disabled={false}
+                        onChange={(e) => {
+                            if (typeof astIdx === 'number') {
+                                handlersRef.current.handleToggleTodoByIndex(memoRef.current, astIdx, e.target.checked);
+                            } else {
+                                console.error('AST parsing failed to assign index to this checkbox!');
+                            }
+                        }}
+                    />
+                );
+            }
+            return <input {...props} />;
+        }
+    }), []); // Empty deps array means these components are NEVER completely destroyed during normal updates
+
+    return (
+        <ReactMarkdown
+            remarkPlugins={_remarkPlugins}
+            rehypePlugins={_rehypePlugins}
+            components={components}
+        >
+            {preprocessMarkdown(memo.content)}
+        </ReactMarkdown>
+    );
+});
 
 function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
@@ -693,53 +771,12 @@ function App() {
                   
                   {memo.content && (
                     <div className="message-content markdown-body">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeCheckboxIndex]}
-                        components={{
-                          p: ({ children }) => <div className="p-div">{children}</div>,
-                          a: ({node, href, children, ...props}) => {
-                            if (href && href.startsWith('#search-tag-')) {
-                              const tag = href.replace('#search-tag-', '');
-                              return (
-                                <span className="tag-highlight" style={{cursor: 'pointer'}} onClick={(e) => { e.preventDefault(); clearFilters(); setFilterTag(tag); }}>
-                                  {children}
-                                </span>
-                              );
-                            }
-                            if (node?.children?.length === 1 && node.children[0].type === 'text' && node.children[0].value === href) {
-                              return <LinkPreview url={href} />;
-                            }
-                            return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-                          },
-                          input: ({ node, checked, ...props }: any) => {
-                              if (props.type === 'checkbox') {
-                                  // AST parsing plugin (rehypeCheckboxIndex) guarantees this index matches document order perfectly
-                                  const astIdx = props['data-checkbox-index'];
-                                  return (
-                                      <input
-                                          {...props}
-                                          type="checkbox"
-                                          checked={!!checked}
-                                          readOnly={false}
-                                          disabled={false}
-                                          key={`cb-${memo.id}-${astIdx}`}
-                                          onChange={(e) => {
-                                              if (typeof astIdx === 'number') {
-                                                  handleToggleTodoByIndex(memo, astIdx, e.target.checked);
-                                              } else {
-                                                  console.error('AST parsing failed to assign index to this checkbox!');
-                                              }
-                                          }}
-                                      />
-                                  );
-                              }
-                              return <input {...props} />;
-                          }
-                        }}
-                      >
-                        {preprocessMarkdown(memo.content)}
-                      </ReactMarkdown>
+                      <MemoMarkdownRenderer 
+                          memo={memo} 
+                          clearFilters={clearFilters} 
+                          setFilterTag={setFilterTag} 
+                          handleToggleTodoByIndex={handleToggleTodoByIndex} 
+                      />
                     </div>
                   )}
                   
