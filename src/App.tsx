@@ -1,3 +1,4 @@
+import { visit } from 'unist-util-visit';
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { Send, Search, Calendar as CalendarIcon, Hash, X, ImagePlus, FileImage, Download, Upload, Settings, Star, Pencil, Trash, Sun, Moon } from 'lucide-react';
@@ -64,6 +65,18 @@ const extractTags = (text: string): string[] => {
 
 const preprocessMarkdown = (text: string) => {
   return text.replace(/(?<=^|\s)#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g, '[#$1](#search-tag-$1)');
+};
+
+
+const rehypeCheckboxIndex = () => {
+  return (tree: any) => {
+    let cbIdx = 0;
+    visit(tree, 'element', (node: any) => {
+      if (node.tagName === 'input' && node.properties && node.properties.type === 'checkbox') {
+        node.properties['data-checkbox-index'] = cbIdx++;
+      }
+    });
+  };
 };
 
 function App() {
@@ -339,25 +352,26 @@ function App() {
       await loadAllTags();
   };
 
-  const handleToggleTodoByLine = async (memo: Memo, lineNum: number, isChecked: boolean) => {
-      const lines = memo.content.split('\n');
-      if (lineNum > 0 && lineNum <= lines.length) {
-          const idx = lineNum - 1; // 1-indexed to 0-indexed
-          // Replace the FIRST occurrence of [ ] or [x] or [X] on this line
-          lines[idx] = lines[idx].replace(/\[[ xX]\]/i, isChecked ? '[x]' : '[ ]');
-      }
-      const newContent = lines.join('\n');
+  const handleToggleTodoByIndex = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
+      let count = -1;
+      // Regex matches list items: -, *, +, 1. with any leading whitespace
+      const regex = /(^|\n)([\s]*[-*+]\s+|[\s]*\d+\.\s+)\[[ xX]\]/gi;
+      const newContent = memo.content.replace(regex, (match, p1, p2) => {
+          count++;
+          if (count === checkboxIndex) {
+              return p1 + p2 + (isChecked ? '[x]' : '[ ]');
+          }
+          return match;
+      });
 
-      console.group('--- TODO TOGGLE BY LINE DEBUG ---');
-      console.log('Target Line:', lineNum, 'To Be Checked:', isChecked);
-      console.log('Original Content:', JSON.stringify(memo.content));
-      console.log('New Content:', JSON.stringify(newContent));
+      console.group('--- TODO TOGGLE BY AST INDEX DEBUG ---');
+      console.log('Target Index:', checkboxIndex, 'To Be Checked:', isChecked);
       console.log('Change detected?', memo.content !== newContent);
       console.groupEnd();
 
       if (memo.content === newContent) {
-          console.warn(`Checkbox toggle failed: No match found on line ${lineNum}`);
-          return; // Skip DB update if identical
+          console.warn('Checkbox toggle failed: No match found at AST index', checkboxIndex);
+          return;
       }
 
       const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
@@ -681,6 +695,7 @@ function App() {
                     <div className="message-content markdown-body">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeCheckboxIndex]}
                         components={{
                           p: ({ children }) => <div className="p-div">{children}</div>,
                           a: ({node, href, children, ...props}) => {
@@ -697,24 +712,23 @@ function App() {
                             }
                             return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
                           },
-                          input: ({ node, checked, ...props }) => {
+                          input: ({ node, checked, ...props }: any) => {
                               if (props.type === 'checkbox') {
-                                  // React-markdown passes AST node via `node` prop. `node.position.start.line` is the 1-indexed line number.
-                                  const lineNum = node?.position?.start?.line;
+                                  // AST parsing plugin (rehypeCheckboxIndex) guarantees this index matches document order perfectly
+                                  const astIdx = props['data-checkbox-index'];
                                   return (
                                       <input
-                                          // Ignore props.disabled so the user can click it
-                                          className={props.className}
+                                          {...props}
                                           type="checkbox"
                                           checked={!!checked}
                                           readOnly={false}
                                           disabled={false}
-                                          key={`cb-${memo.id}-${lineNum || Math.random()}`}
+                                          key={`cb-${memo.id}-${astIdx}`}
                                           onChange={(e) => {
-                                              if (lineNum) {
-                                                  handleToggleTodoByLine(memo, lineNum, e.target.checked);
+                                              if (typeof astIdx === 'number') {
+                                                  handleToggleTodoByIndex(memo, astIdx, e.target.checked);
                                               } else {
-                                                  console.error('No line number available for this checkbox!');
+                                                  console.error('AST parsing failed to assign index to this checkbox!');
                                               }
                                           }}
                                       />
