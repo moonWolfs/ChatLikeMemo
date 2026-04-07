@@ -339,27 +339,25 @@ function App() {
       await loadAllTags();
   };
 
-  const handleToggleTodo = async (memo: Memo, checkboxIndex: number, isChecked: boolean) => {
-      let count = -1;
-      // Regex matches list items: -, *, +, 1. with any leading whitespace
-      const regex = /(^|\n)([\s]*[-*+]\s+|[\s]*\d+\.\s+)\[[ xX]\]/gi;
-      const newContent = memo.content.replace(regex, (match, p1, p2) => {
-          count++;
-          if (count === checkboxIndex) {
-              return p1 + p2 + (isChecked ? '[x]' : '[ ]');
-          }
-          return match;
-      });
+  const handleToggleTodoByLine = async (memo: Memo, lineNum: number, isChecked: boolean) => {
+      const lines = memo.content.split('\n');
+      if (lineNum > 0 && lineNum <= lines.length) {
+          const idx = lineNum - 1; // 1-indexed to 0-indexed
+          // Replace the FIRST occurrence of [ ] or [x] or [X] on this line
+          lines[idx] = lines[idx].replace(/\[[ xX]\]/i, isChecked ? '[x]' : '[ ]');
+      }
+      const newContent = lines.join('\n');
 
-      console.group('--- TODO TOGGLE DEBUG ---');
-      console.log('Target Index:', checkboxIndex, 'To Be Checked:', isChecked);
+      console.group('--- TODO TOGGLE BY LINE DEBUG ---');
+      console.log('Target Line:', lineNum, 'To Be Checked:', isChecked);
       console.log('Original Content:', JSON.stringify(memo.content));
       console.log('New Content:', JSON.stringify(newContent));
       console.log('Change detected?', memo.content !== newContent);
       console.groupEnd();
 
       if (memo.content === newContent) {
-          console.warn('Checkbox toggle failed: No match found at index', checkboxIndex);
+          console.warn(`Checkbox toggle failed: No match found on line ${lineNum}`);
+          return; // Skip DB update if identical
       }
 
       const tagMatches = newContent.match(/#([\w\u3040-\u30FF\u4E00-\u9FFF]+)/g);
@@ -681,7 +679,6 @@ function App() {
                   
                   {memo.content && (
                     <div className="message-content markdown-body">
-                      {(() => { let cbIdx = 0; return (
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -700,10 +697,10 @@ function App() {
                             }
                             return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
                           },
-                          input: ({ checked, ...props }) => {
+                          input: ({ node, checked, ...props }) => {
                               if (props.type === 'checkbox') {
-                                  let myIdx = cbIdx++;
-                                  console.log(`[RENDER-INPUT] Memo:${memo.id}, Index:${myIdx}, Checked:${checked}`);
+                                  // React-markdown passes AST node via `node` prop. `node.position.start.line` is the 1-indexed line number.
+                                  const lineNum = node?.position?.start?.line;
                                   return (
                                       <input
                                           // Ignore props.disabled so the user can click it
@@ -712,10 +709,13 @@ function App() {
                                           checked={!!checked}
                                           readOnly={false}
                                           disabled={false}
-                                          key={`cb-${memo.id}-${myIdx}`}
+                                          key={`cb-${memo.id}-${lineNum || Math.random()}`}
                                           onChange={(e) => {
-                                              console.warn(`[CLICK-INPUT] Memo:${memo.id}, Index:${myIdx}, NewVal:${e.target.checked}`);
-                                              handleToggleTodo(memo, myIdx, e.target.checked);
+                                              if (lineNum) {
+                                                  handleToggleTodoByLine(memo, lineNum, e.target.checked);
+                                              } else {
+                                                  console.error('No line number available for this checkbox!');
+                                              }
                                           }}
                                       />
                                   );
@@ -726,7 +726,6 @@ function App() {
                       >
                         {preprocessMarkdown(memo.content)}
                       </ReactMarkdown>
-                      ); })()}
                     </div>
                   )}
                   
